@@ -4,5 +4,6 @@ set(EXTRA_COMPONENT_DIRS
     ${CMAKE_SOURCE_DIR}/../..
     ${CMAKE_SOURCE_DIR}/../../components
 )
-project(receive_pool)
+project(receive_poll)
+
 

@@ -2,7 +2,7 @@
  * @file config_receive.h
  * @brief Hardware configuration for receive examples
  * 
- * This file defines the hardware setup for receive_pool and receive_interrupt examples:
+ * This file defines the hardware setup for receive_poll and receive_interrupt examples:
  * - 3 MCP2515 devices on SPI2 host
  * - Each device has its own INT (interrupt) pin for event-driven reception
  * - 16 MHz crystal, 1 Mbps CAN bitrate
@@ -12,7 +12,7 @@
  * 
  * @note GPIO pin assignments are for ESP32-S3. Other ESP32 variants may
  *       require different pin selections.
- * @note For receive_pool example, INT pins are defined but not actively used.
+ * @note For receive_poll example, INT pins are defined but not actively used.
  *       For receive_interrupt example, INT pins must be properly connected.
  */
 

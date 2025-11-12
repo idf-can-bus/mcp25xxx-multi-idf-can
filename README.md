@@ -111,7 +111,7 @@ esp32-can-mcp2515-multi/
     │   └── main/
     │       ├── CMakeLists.txt  # Main component
     │       └── main.c          # Application code
-    ├── receive_pool/
+    ├── receive_poll/
     │   ├── CMakeLists.txt
     │   └── main/
     │       ├── CMakeLists.txt
@@ -255,15 +255,15 @@ Or combine flash and monitor:
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
-### Example 2: Receive Poll 
+### Example 2: Receive Poll
 Receiving CAN messages from multiple buses using the polling method (no interrupts).
 
 **Hardware configuration:** Edit [examples/config_receive.h](examples/config_receive.h) - 3 MCP2515 devices on SPI2 (with interrupt pins defined but not used in this example).
 
-**Application code:** [examples/receive_pool/main/main.c](examples/receive_pool/main/main.c)
+**Application code:** [examples/receive_poll/main/main.c](examples/receive_poll/main/main.c)
 
 ```bash
-cd examples/receive_pool
+cd examples/receive_poll
 idf.py set-target esp32s3        # Set your target chip
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
