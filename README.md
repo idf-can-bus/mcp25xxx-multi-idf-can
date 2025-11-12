@@ -28,7 +28,7 @@ Supports multiple MCP2515 controllers on one or more SPI buses, numeric bus/devi
 
 ## Hardware notes
 - A 120-ohm termination resistor should be placed at **one** end of the bus **only**!
-- Custom GPIO assignments are configurable (see `examples/config_send.h` and `examples/config_receive.h` for templates).
+- Custom GPIO assignments are configurable (see [examples/config_send.h](examples/config_send.h) and [examples/config_receive.h](examples/config_receive.h) for templates).
 - Either SPI2 or SPI3 may be used (SPI1 is reserved for flash on most ESP32 variants).
 - Supported ESP32 variants: ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C6, and other ESP-IDF compatible chips.
 - Each MCP2515 device requires a CS (Chip Select) pin; optionally an INT (Interrupt) pin for event-driven reception.
@@ -174,12 +174,12 @@ All examples are located in the `examples/` directory. Each example demonstrates
 ### Hardware Configuration
 
 **Important:** Hardware configuration (GPIO pins, SPI speed, MCP2515 crystal frequency, CAN bitrate) is defined in configuration header files located in the `examples/` directory:
-- `examples/config_send.h` - Configuration for send example (2 TX devices on SPI3)
-- `examples/config_receive.h` - Configuration for receive examples (3 RX devices on SPI2)
+- [examples/config_send.h](examples/config_send.h) - Configuration for send example (2 TX devices on SPI3)
+- [examples/config_receive.h](examples/config_receive.h) - Configuration for receive examples (3 RX devices on SPI2)
 
 You **must** adapt these configuration files to match your hardware setup before building the examples.
 
-**Note:** These config files are included by the example applications using relative paths (e.g., `#include "../config_send.h"` from `examples/send/main/main.c`).
+**Note:** These config files are included by the example applications using relative paths (e.g., `#include "config_send.h"` from [examples/send/main/main.c](examples/send/main/main.c)).
 
 Configuration includes:
 - **SPI bus wiring**: MISO, MOSI, SCLK pins
@@ -238,9 +238,9 @@ ls /dev/cu.*
 ### Example 1: Send 
 Sending CAN messages to multiple independent buses (polling transmission).
 
-**Hardware configuration:** Edit `examples/config_send.h` - 2 MCP2515 devices on SPI3 (TX only, no interrupt pins).
+**Hardware configuration:** Edit [examples/config_send.h](examples/config_send.h) - 2 MCP2515 devices on SPI3 (TX only, no interrupt pins).
 
-**Application code:** `examples/send/main/main.c`
+**Application code:** [examples/send/main/main.c](examples/send/main/main.c)
 
 ```bash
 cd examples/send
@@ -258,9 +258,9 @@ idf.py -p /dev/ttyUSB0 flash monitor
 ### Example 2: Receive Poll 
 Receiving CAN messages from multiple buses using the polling method (no interrupts).
 
-**Hardware configuration:** Edit `examples/config_receive.h` - 3 MCP2515 devices on SPI2 (with interrupt pins defined but not used in this example).
+**Hardware configuration:** Edit [examples/config_receive.h](examples/config_receive.h) - 3 MCP2515 devices on SPI2 (with interrupt pins defined but not used in this example).
 
-**Application code:** `examples/receive_pool/main/main.c`
+**Application code:** [examples/receive_pool/main/main.c](examples/receive_pool/main/main.c)
 
 ```bash
 cd examples/receive_pool
@@ -271,9 +271,9 @@ idf.py -p /dev/ttyUSB0 flash monitor
 ### Example 3: Receive Interrupt
 Receiving CAN messages from multiple buses using interrupt-driven reception (most efficient).
 
-**Hardware configuration:** Edit `examples/config_receive.h` - 3 MCP2515 devices on SPI2 with INT pins connected.
+**Hardware configuration:** Edit [examples/config_receive.h](examples/config_receive.h) - 3 MCP2515 devices on SPI2 with INT pins connected.
 
-**Application code:** `examples/receive_interrupt/main/main.c`
+**Application code:** [examples/receive_interrupt/main/main.c](examples/receive_interrupt/main/main.c)
 
 ```bash
 cd examples/receive_interrupt
@@ -288,13 +288,13 @@ If you prefer GUI-based development, you can use VS Code or Cursor with the ESP-
 **Example 1: Send (using ESP-IDF extension)**
 1. Open the example folder: `File → Open Folder → examples/send/`
 2. Set target: `Ctrl+Shift+P` → `ESP-IDF: Set Espressif Device Target` → select `esp32s3`
-3. Edit hardware configuration in `examples/config_send.h` according to your setup
+3. Edit hardware configuration in [examples/config_send.h](examples/config_send.h) according to your setup
 4. Select serial port: `Ctrl+Shift+P` → `ESP-IDF: Select Port to Use` → select your port
 5. Build, flash and monitor: `Ctrl+Shift+P` → `ESP-IDF: Build, Flash and Monitor`
 
 **Note:** 
 - Examples 2 and 3 follow the same procedure - just open their respective folders.
-- Edit `examples/config_receive.h` for receive examples.
+- Edit [examples/config_receive.h](examples/config_receive.h) for receive examples.
 - Application code is in `main/main.c` subdirectory within each example.
 
 **Linux users:** If you get "Permission denied" on `/dev/ttyUSB0`, add your user to the dialout group:
