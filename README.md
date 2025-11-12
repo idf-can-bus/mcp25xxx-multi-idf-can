@@ -4,7 +4,7 @@ Extended CAN driver for ESP32 using multiple MCP2515 controllers over SPI.
 Supports independent or parallel operation of several CAN buses with shared SPI interface and separate CS/INT lines.
 Designed for ESP-IDF framework (C language).
 
-![ESP32 with multiple MCP2515 CAN controllers](doc/ESP32_MCP2515_CAN_400x400.png)
+![ESP32 with multiple MCP2515 CAN controllers](doc/ESP32_MCP2515_CAN_steampunk400x400.png)
 
 High-level multi-device MCP2515 library for ESP-IDF with a stable public 
 interface and a separate internal backend. 
