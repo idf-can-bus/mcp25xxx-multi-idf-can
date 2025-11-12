@@ -1,0 +1,3 @@
+[submodule "components/examples_utils"]
+	path = components/examples_utils
+	url = git@github.com:esp32-can/esp32-can-examples-utils.git
