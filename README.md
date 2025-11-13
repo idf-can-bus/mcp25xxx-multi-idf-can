@@ -49,6 +49,45 @@ This library has been successfully tested with the following hardware setup:
   - Uses MCP25625 integrated circuit (combines MCP2515 CAN controller + MCP2551 CAN transceiver)
   - **Important:** STBY/A1 pin connected to ground on all modules for normal operation mode
 
+## Cloning the Repository
+
+This project uses git submodules for the `components/examples_utils` component. You must initialize and update submodules after cloning.
+
+### Option 1: Clone with Submodules (Recommended)
+
+Clone the repository with all submodules in one step:
+
+```bash
+git clone --recursive git@github.com:esp32-can/esp32-can-mcp2515-multi.git
+```
+
+Or using HTTPS:
+
+```bash
+git clone --recursive https://github.com/esp32-can/esp32-can-mcp2515-multi.git
+```
+
+### Option 2: Clone First, Initialize Submodules Later
+
+If you've already cloned the repository without `--recursive`:
+
+```bash
+git clone git@github.com:esp32-can/esp32-can-mcp2515-multi.git
+cd esp32-can-mcp2515-multi
+git submodule init
+git submodule update
+```
+
+### Updating Submodules
+
+To update all submodules to their latest versions:
+
+```bash
+git submodule update --remote
+```
+
+**Note:** The `examples_utils` submodule is required for building the examples. Without it, the build will fail with missing header errors.
+
 ## Quick start
 
 **Note:** These instructions work for both single and multiple MCP2515 devices. For a single device, simply configure a bundle with `device_count = 1`.
@@ -89,35 +128,49 @@ for (size_t i = 0; i < canif_bus_device_count(bus); ++i) {
 
 ```
 esp32-can-mcp2515-multi/
+├── .gitmodules                 # Git submodule configuration
 ├── CMakeLists.txt              # Main library component
 ├── idf_component.yml           # Component metadata
+├── LICENSE                     # MIT License
+├── README.md                   # This file
 ├── include/
-│   ├── mcp2515_multi.h         # Public API header
-│   └── can_message.h           # CAN message definition
+│   └── mcp2515_multi.h         # Public API header
 ├── src/
 │   ├── mcp2515_multi.c         # Public API implementation
 │   ├── mcp2515_multi_internal.c # Backend implementation
 │   └── mcp2515_multi_internal.h # Backend header (internal use only)
+├── doc/
+│   └── ESP32_MCP2515_CAN_steampunk400x400.png # Documentation image
 ├── components/
-│   └── examples_utils/         # Utility functions for examples
+│   └── examples_utils/         # Utility functions for examples (git submodule)
 │       ├── CMakeLists.txt
-│       ├── examples_utils.h
-│       └── examples_utils.c
+│       ├── idf_component.yml
+│       ├── LICENSE
+│       ├── README.md
+│       ├── examples_utils.c
+│       └── include/
+│           └── examples_utils.h
 └── examples/
     ├── config_send.h           # HW config for send example
     ├── config_receive.h        # HW config for receive examples
     ├── send/
     │   ├── CMakeLists.txt      # ESP-IDF project file
+    │   ├── dependencies.lock   # ESP-IDF dependencies
+    │   ├── sdkconfig           # ESP-IDF configuration
     │   └── main/
     │       ├── CMakeLists.txt  # Main component
     │       └── main.c          # Application code
     ├── receive_poll/
     │   ├── CMakeLists.txt
+    │   ├── dependencies.lock
+    │   ├── sdkconfig
     │   └── main/
     │       ├── CMakeLists.txt
     │       └── main.c
     └── receive_interrupt/
         ├── CMakeLists.txt
+        ├── dependencies.lock
+        ├── sdkconfig
         └── main/
             ├── CMakeLists.txt
             └── main.c

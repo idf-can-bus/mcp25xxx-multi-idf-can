@@ -59,3 +59,7 @@ dkms.conf
 
 # debug information files
 *.dwo
+# ESP-IDF Component Manager
+*/dependencies.lock
+dependencies.lock
+managed_components/
