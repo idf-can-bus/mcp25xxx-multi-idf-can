@@ -1,4 +1,4 @@
-# esp32-can-mcp2515-multi
+# mcp25xxx-multi-idf-can
 Extended CAN driver for ESP32 using multiple MCP25xxx controllers over SPI.
 
 Supports independent or parallel operation of several CAN buses with shared SPI interface and separate CS/INT lines.
@@ -58,13 +58,13 @@ This project uses git submodules for the `components/examples-utils-idf-can` com
 Clone the repository with all submodules in one step:
 
 ```bash
-git clone --recursive git@github.com:esp32-can/esp32-can-mcp2515-multi.git
+git clone --recursive git@github.com:idf-can-bus/mcp25xxx-multi-idf-can.git
 ```
 
 Or using HTTPS:
 
 ```bash
-git clone --recursive https://github.com/esp32-can/esp32-can-mcp2515-multi.git
+git clone --recursive https://github.com/idf-can-bus/mcp25xxx-multi-idf-can.git
 ```
 
 ### Option 2: Clone First, Initialize Submodules Later
@@ -72,8 +72,8 @@ git clone --recursive https://github.com/esp32-can/esp32-can-mcp2515-multi.git
 If you've already cloned the repository without `--recursive`:
 
 ```bash
-git clone git@github.com:esp32-can/esp32-can-mcp2515-multi.git
-cd esp32-can-mcp2515-multi
+git clone git@github.com:idf-can-bus/mcp25xxx-multi-idf-can.git
+cd mcp25xxx-multi-idf-can
 git submodule init
 git submodule update
 ```
@@ -127,12 +127,16 @@ for (size_t i = 0; i < canif_bus_device_count(bus); ++i) {
 ## Project Structure
 
 ```
-esp32-can-mcp2515-multi/
+mcp25xxx-multi-idf-can/
 ├── .gitmodules                 # Git submodule configuration
 ├── CMakeLists.txt              # Main library component
 ├── idf_component.yml           # Component metadata
 ├── LICENSE                     # MIT License
 ├── README.md                   # This file
+├── BUILDING_EXAMPLES.md        # Detailed build instructions
+├── Makefile                    # GNU Make build script
+├── set_target_all.sh           # Bash script to set target for all examples
+├── build_all_examples.sh       # Bash script to build all examples
 ├── include/
 │   └── mcp25xxx_multi.h         # Public API header
 ├── src/
@@ -189,7 +193,7 @@ esp32-can-mcp2515-multi/
 
 1. Copy the entire library directory to your project's `components/` folder:
    ```bash
-   cp -r esp32-can-mcp2515-multi /path/to/your-project/components/
+   cp -r mcp25xxx-multi-idf-can /path/to/your-project/components/
    ```
 
 2. Include the header in your code:
@@ -205,7 +209,7 @@ esp32-can-mcp2515-multi/
 
 1. In your project's `CMakeLists.txt`, add the library path to `EXTRA_COMPONENT_DIRS`:
    ```cmake
-   set(EXTRA_COMPONENT_DIRS /path/to/esp32-can-mcp2515-multi)
+   set(EXTRA_COMPONENT_DIRS /path/to/mcp25xxx-multi-idf-can)
    ```
 
 2. Include the header in your code:
@@ -217,7 +221,7 @@ esp32-can-mcp2515-multi/
 
 When published to the ESP Component Registry, install via:
 ```bash
-idf.py add-dependency "esp32-can-mcp2515-multi"
+idf.py add-dependency "mcp25xxx-multi-idf-can"
 ```
 
 ## Examples
@@ -240,6 +244,40 @@ Configuration includes:
 - **SPI parameters**: Clock speed (typically 10 MHz), mode, DMA channel
 - **MCP25xxx hardware**: Crystal frequency (`MCP25XXX_8MHZ`, `MCP25XXX_16MHZ`, or `MCP25XXX_20MHZ`)
 - **CAN parameters**: Bitrate (e.g., `MCP25XXX_500KBPS`, `MCP25XXX_1000KBPS`), loopback mode
+
+### Building All Examples at Once
+
+For convenience, this project includes scripts to build all examples with a single command:
+
+**Quick start - Build all examples:**
+
+```bash
+# 1. Activate ESP-IDF environment
+. $HOME/esp/esp-idf/export.sh
+
+# 2. Set target chip for ALL examples at once
+./set_target_all.sh esp32s3  # Or: esp32, esp32s2, esp32c3, esp32c6
+
+# 3. Build all examples
+./build_all_examples.sh
+```
+
+**Alternative using Makefile:**
+
+```bash
+# Activate ESP-IDF first
+. $HOME/esp/esp-idf/export.sh
+
+# Build all examples
+make
+
+# Or specific actions
+make clean          # Clean all examples
+make send           # Build only send example
+make receive_poll   # Build only receive_poll example
+```
+
+For detailed instructions, see [BUILDING_EXAMPLES.md](BUILDING_EXAMPLES.md).
 
 ### Environment Setup
 

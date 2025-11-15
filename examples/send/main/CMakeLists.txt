@@ -1,4 +1,4 @@
 idf_component_register(SRCS "main.c"
                        INCLUDE_DIRS "." "../.."
-                       REQUIRES esp32-can-mcp2515-multi examples-utils-idf-can)
+                       REQUIRES mcp25xxx-multi-idf-can examples-utils-idf-can)
 
