@@ -51,7 +51,7 @@ This library has been successfully tested with the following hardware setup:
 
 ## Cloning the Repository
 
-This project uses git submodules for the `components/examples_utils` component. You must initialize and update submodules after cloning.
+This project uses git submodules for the `components/examples-utils-idf-can` component. You must initialize and update submodules after cloning.
 
 ### Option 1: Clone with Submodules (Recommended)
 
@@ -86,7 +86,7 @@ To update all submodules to their latest versions:
 git submodule update --remote
 ```
 
-**Note:** The `examples_utils` submodule is required for building the examples. Without it, the build will fail with missing header errors.
+**Note:** The `examples-utils-idf-can` submodule is required for building the examples. Without it, the build will fail with missing header errors.
 
 ## Quick start
 
@@ -142,7 +142,7 @@ esp32-can-mcp2515-multi/
 ├── doc/
 │   └── ESP32_MCP25xxx_CAN_steampunk400x400.png # Documentation image
 ├── components/
-│   └── examples_utils/         # Utility functions for examples (git submodule)
+│   └── examples-utils-idf-can/ # Utility functions for examples (git submodule)
 │       ├── CMakeLists.txt
 │       ├── idf_component.yml
 │       ├── LICENSE
