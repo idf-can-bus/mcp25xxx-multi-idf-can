@@ -22,6 +22,9 @@ extern "C"
 #endif
 void app_main(void)
 {
+    // Identify example and backend
+    ESP_LOGI(TAG, "=== example: send-multi, backend: %s ===", can_backend_get_name());
+
     // Initialize MCP25xxx multi library with hardware configuration from config_send.h
     (void)canif_multi_init_default(&CAN_HW_CFG);
 
@@ -37,9 +40,9 @@ void app_main(void)
     for (size_t i = 0; i < n; ++i) {
         heartbeat[i] = 0;
         sender_ids[i] = (uint8_t)(i + 1); // IDs 1..N
+        ESP_LOGI(TAG, "SENDER_ID: %u", sender_ids[i]);
     }
 
-    ESP_LOGI(TAG, "Multi sender, %zu TX instances", n);
 
     twai_message_t msg;
     uint64_t index = 0;

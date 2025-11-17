@@ -2,10 +2,7 @@
  * @file config_send.h
  * @brief Hardware configuration for send example
  * 
- * This file defines the hardware setup for the send example:
- * - 2 MCP25xxx devices on SPI3 host
- * - TX-only configuration (no INT pins)
- * - 16 MHz crystal, 1 Mbps CAN bitrate
+ * This file defines the hardware setup for the send example.
  * 
  * **IMPORTANT:** Adapt GPIO pins, SPI host, crystal frequency, and CAN bitrate
  * to match your actual hardware before building the example.

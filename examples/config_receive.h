@@ -2,10 +2,7 @@
  * @file config_receive.h
  * @brief Hardware configuration for receive examples
  * 
- * This file defines the hardware setup for receive_poll and receive_interrupt examples:
- * - 3 MCP25xxx devices on SPI2 host
- * - Each device has its own INT (interrupt) pin for event-driven reception
- * - 16 MHz crystal, 1 Mbps CAN bitrate
+ * This file defines the hardware setup for receive_poll and receive_interrupt examples.
  * 
  * **IMPORTANT:** Adapt GPIO pins, SPI host, crystal frequency, and CAN bitrate
  * to match your actual hardware before building the examples.

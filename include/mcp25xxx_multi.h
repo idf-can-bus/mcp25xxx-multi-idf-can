@@ -623,6 +623,18 @@ can_bus_id_t       canif_bus_id_of(can_bus_handle_t bus);
 /** @brief Extracts dev_id from a device handle */
 can_dev_id_t       canif_dev_id_of(can_dev_handle_t dev);
 
+/**
+ * @brief Get human-readable backend name for MCP25xxx multi adapter
+ *
+ * Standalone usage of this component gets its default implementation
+ * from mcp25xxx_multi.c. In the multi-backend integration project,
+ * a dispatcher layer may override this symbol to report a different
+ * backend name while keeping the default available as a weak symbol.
+ *
+ * @return const char* Static C string with backend name
+ */
+const char *can_backend_get_name(void);
+
 /** @} */ // end of introspection group
 
 #ifdef __cplusplus

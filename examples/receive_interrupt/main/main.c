@@ -77,6 +77,10 @@ extern "C"
 #endif
 void app_main(void)
 {
+    // Identify example and backend
+    ESP_LOGI(TAG, "=== example: receive_interrupt-multi, backend: %s, INSTANCES:%u ===",
+        can_backend_get_name(), (unsigned)n);
+        
     // Initialize MCP25xxx multi library with hardware configuration from config_receive.h
     (void)canif_multi_init_default(&CAN_HW_CFG);
 
@@ -86,10 +90,9 @@ void app_main(void)
         return;
     }
 
-    ESP_LOGI(TAG, "Receiver interrupt-driven");
-
     can_bus_handle_t bus = canif_bus_default();
     size_t n = canif_bus_device_count(bus);
+    
     // Create one producer per instance
     for (size_t i=0; i<n; ++i) {
         producer_arg_t *parg = (producer_arg_t*)pvPortMalloc(sizeof(producer_arg_t));

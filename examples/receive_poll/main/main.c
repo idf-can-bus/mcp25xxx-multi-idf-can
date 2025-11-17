@@ -24,6 +24,10 @@ extern "C"
 #endif
 void app_main(void)
 {
+    // Identify example and backend
+    ESP_LOGI(TAG, "=== example: receive_poll-multi, backend: %s, INSTANCES:%u ===",
+        can_backend_get_name(), (unsigned)n);
+        
     // Initialize MCP25xxx multi library with hardware configuration from config_receive.h
     (void)canif_multi_init_default(&CAN_HW_CFG);
 
@@ -33,7 +37,7 @@ void app_main(void)
     can_bus_handle_t bus = canif_bus_default();
     size_t n = canif_bus_device_count(bus);
 
-    ESP_LOGI(TAG, "Receiver poll-driven, MCP25xxx multi, %zu instances", n);
+    
     while (1) {
         // poll all instances
         for (size_t i=0; i<n; ++i) {

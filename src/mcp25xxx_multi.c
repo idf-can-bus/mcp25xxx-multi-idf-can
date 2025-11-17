@@ -637,4 +637,19 @@ bool canif_receive_default(twai_message_t* msg)
     return canif_receive_from(canif_device_default(), msg);
 }
 
+// ======================================================================================
+// Backend identification
+// ======================================================================================
+
+/*
+ * Default backend name for standalone usage of this component.
+ *
+ * Marked weak so that higher-level integration layers (such as a
+ * multi-backend dispatcher) can provide a strong override without
+ * breaking standalone builds or requiring knowledge of their Kconfig.
+ */
+__attribute__((weak)) const char *can_backend_get_name(void)
+{
+    return "MCP25xxx multi";
+}
 
