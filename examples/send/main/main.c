@@ -34,6 +34,8 @@ void app_main(void)
     can_bus_handle_t bus = canif_bus_default();
     size_t n = canif_bus_device_count(bus);
 
+    ESP_LOGI(TAG, "=== instances: %u ===", (unsigned)n);
+
     // Size arrays dynamically by number of instances
     uint8_t heartbeat[n];
     uint8_t sender_ids[n];
