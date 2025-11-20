@@ -1,3 +1,19 @@
+/**
+ * @file mcp25xxx_multi_internal.c
+ * @brief Implementation of the low-level backend for MCP25xxx device control
+ * 
+ * This file implements the internal backend API for direct MCP25xxx SPI communication,
+ * register access, mode control, and message transmission/reception.
+ * 
+ * The backend provides:
+ * - Direct SPI register read/write operations
+ * - Device initialization and mode switching
+ * - TX/RX buffer management
+ * - Interrupt handling infrastructure
+ * 
+ * @warning This is internal implementation. Applications should use mcp25xxx_multi.h.
+ */
+
 #include <string.h>
 #include <stdlib.h>
 #include "freertos/FreeRTOS.h"

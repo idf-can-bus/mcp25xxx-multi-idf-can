@@ -1,3 +1,16 @@
+/**
+ * @file mcp25xxx_multi.c
+ * @brief Implementation of the high-level multi-device MCP25xxx library
+ * 
+ * This file implements the public API defined in mcp25xxx_multi.h, providing
+ * device registry management, initialization, messaging, and lifecycle control
+ * for multiple MCP25xxx CAN controllers.
+ * 
+ * The implementation maintains an internal registry of SPI buses and devices,
+ * provides stable handle structures, and wraps the low-level backend API
+ * with a user-friendly interface.
+ */
+
 #include <string.h>
 #include "mcp25xxx_multi.h"
 #include "mcp25xxx_multi_internal.h"
