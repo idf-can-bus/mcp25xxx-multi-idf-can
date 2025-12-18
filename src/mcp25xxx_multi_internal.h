@@ -27,6 +27,10 @@
 extern "C" {
 #endif
 
+// Forward declaration for SW buffer (opaque pointer, defined in .c file)
+struct spsc_ring_buffer_s;
+typedef struct spsc_ring_buffer_s spsc_ring_buffer_t;
+
 // --------------------------------------------------------------------------------------
 // Public types
 
@@ -158,6 +162,23 @@ ERROR_t MCP25XXX_SendMessageAfterCtrlCheck(MCP25XXX_Handle h, const CAN_FRAME* f
 /** @brief Reads CAN frame (after checking status) */
 ERROR_t MCP25XXX_ReadMessageAfterStatCheck(MCP25XXX_Handle h, CAN_FRAME* frame);
 
+/**
+ * @brief Read all available messages from both RX buffers.
+ * 
+ * MCP25625/MCP2515 has two RX buffers (RXB0, RXB1). When multiple messages
+ * arrive rapidly, both buffers may contain data. This function reads all
+ * available messages in priority order (RXB0 first, then RXB1) to prevent
+ * hardware buffer overflow.
+ * 
+ * @param h MCP25xxx handle
+ * @param frames Output array for received frames (must have space for at least 2 frames)
+ * @param max_count Maximum number of frames to read (typically 2)
+ * @param out_count Pointer to store the actual number of frames read (0-2)
+ * @return ERROR_OK if at least one message was read, ERROR_NOMSG if no messages available
+ */
+ERROR_t MCP25XXX_ReadAllAvailable(MCP25XXX_Handle h, CAN_FRAME* frames, 
+                                   uint8_t max_count, uint8_t* out_count);
+
 // Events
 
 /** @brief Registers event callback */
@@ -176,6 +197,42 @@ void    MCP25XXX_ClearRXnOVR(MCP25XXX_Handle h);
 
 /** @brief Clears error interrupt flag */
 void    MCP25XXX_ClearERRIF(MCP25XXX_Handle h);
+
+/**
+ * @brief Read frame from SW RX FIFO.
+ *
+ * Reads from software buffer (populated by ISR). This is the preferred
+ * method for interrupt-driven devices as it avoids direct HW access.
+ *
+ * @param h MCP25xxx handle
+ * @param frame Output frame structure
+ * @return ERROR_OK if frame read, ERROR_NOMSG if FIFO empty or not configured
+ */
+ERROR_t MCP25XXX_ReadFromFifo(MCP25XXX_Handle h, CAN_FRAME* frame);
+
+/**
+ * @brief Get SW RX buffer statistics.
+ *
+ * @param h MCP25xxx handle
+ * @param out_size Current FIFO size (or NULL)
+ * @param out_dropped Total dropped frames (or NULL)
+ * @param out_seq Last sequence number (or NULL)
+ * @return true if buffer exists, false otherwise
+ */
+bool    MCP25XXX_GetRxFifoStats(MCP25XXX_Handle h, uint32_t* out_size, 
+                                 uint32_t* out_dropped, uint32_t* out_seq);
+
+/**
+ * @brief Get global ISR debug counters.
+ *
+ * Useful for diagnosing interrupt and FIFO issues.
+ *
+ * @param out_isr_calls Total ISR invocations (or NULL)
+ * @param out_frames_read Total frames read in ISR (or NULL)
+ * @param out_fifo_pushes Total FIFO pushes in ISR (or NULL)
+ */
+void    MCP25XXX_GetIsrDebugCounters(uint32_t* out_isr_calls, uint32_t* out_frames_read,
+                                      uint32_t* out_fifo_pushes);
 
 #ifdef __cplusplus
 }

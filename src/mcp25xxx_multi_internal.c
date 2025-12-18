@@ -10,6 +10,7 @@
  * - Device initialization and mode switching
  * - TX/RX buffer management
  * - Interrupt handling infrastructure
+ * - Software RX FIFO buffering for burst traffic handling
  * 
  * @warning This is internal implementation. Applications should use mcp25xxx_multi.h.
  */
@@ -22,6 +23,15 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "mcp25xxx_multi_internal.h"
+#include "spsc_ring_buffer_seq_c.h"
+
+// Software RX buffer capacity (must be power of 2)
+// 128 frames is sufficient for ~40ms of burst traffic at 3 msg/ms per device
+#define MCP25XXX_SW_RX_BUFFER_CAPACITY 128
+
+// Compile-time check: CAN_FRAME must fit in SPSC payload
+_Static_assert(sizeof(CAN_FRAME) <= SPSC_RING_PAYLOAD_SIZE,
+               "CAN_FRAME too large for SPSC_RING_PAYLOAD_SIZE");
 
 // MCP25xxx instructions / registers (subset)
 #define INSTRUCTION_RESET       0xC0
@@ -104,17 +114,66 @@ typedef struct MCP25XXX_Context {
     void*               cb_user;
     mcp25xxx_speed_t    can_speed;
     mcp25xxx_clock_t    can_clock;
+    
+    // Software RX FIFO buffer (critical for preventing HW overflow)
+    // MCP25625 has only 2 HW RX buffers. SW buffer allows ISR to drain
+    // HW buffers immediately, preventing message loss during burst traffic.
+    spsc_ring_buffer_t* rx_fifo;  // Dynamically allocated on create
 } MCP25XXX_Context;
 
-// static const char* TAG = "mcp2515_multi";
+static const char* TAG = "mcp2515_multi";
 
+// Debug counters for ISR (visible for diagnostics)
+static volatile uint32_t g_isr_call_count = 0;
+static volatile uint32_t g_isr_frames_read = 0;
+static volatile uint32_t g_isr_fifo_pushes = 0;
+
+/**
+ * @brief ISR handler for MCP25xxx interrupt pin.
+ *
+ * CRITICAL: This handler drains both HW RX buffers immediately into SW FIFO
+ * to prevent overflow. MCP25625 has only 2 HW buffers which can fill in <1ms
+ * during burst traffic.
+ *
+ * @param arg Pointer to MCP25XXX_Context
+ *
+ * @note WARNING: Cannot call ESP_LOG functions from ISR (not IRAM safe).
+ *       Uses global counters for debugging instead.
+ */
 static void IRAM_ATTR mcp2515_isr_handler(void* arg)
 {
     MCP25XXX_Context* ctx = (MCP25XXX_Context*)arg;
+    if (!ctx) return;
+    
+    g_isr_call_count++;  // Debug: count ISR invocations
+    
     BaseType_t woken = pdFALSE;
-    if (ctx && ctx->event_sem) {
+    
+    // CRITICAL: Immediately drain both HW RX buffers into SW FIFO.
+    // This prevents incoming messages from overwriting the oldest HW buffer.
+    if (ctx->rx_fifo) {
+        CAN_FRAME frames[2];
+        uint8_t count = 0;
+        
+        // Read all available frames from both HW RX buffers
+        ERROR_t rc = MCP25XXX_ReadAllAvailable(ctx, frames, 2, &count);
+        
+        if (rc == ERROR_OK && count > 0) {
+            g_isr_frames_read += count;  // Debug: count frames read
+            
+            // Push frames into SW FIFO (non-blocking, drop-oldest on overflow)
+            for (uint8_t i = 0; i < count; i++) {
+                spsc_ring_push_isr(ctx->rx_fifo, 0, &frames[i]);
+                g_isr_fifo_pushes++;  // Debug: count successful pushes
+            }
+        }
+    }
+    
+    // Signal event semaphore for blocking receive
+    if (ctx->event_sem) {
         xSemaphoreGiveFromISR(ctx->event_sem, &woken);
     }
+    
     if (woken) portYIELD_FROM_ISR();
 }
 
@@ -204,12 +263,22 @@ ERROR_t MCP25XXX_CreateOnDevice(spi_device_handle_t spi,
     if (!spi || !cfg || !out_handle) return ERROR_FAIL;
     MCP25XXX_Context* ctx = (MCP25XXX_Context*)calloc(1, sizeof(MCP25XXX_Context));
     if (!ctx) return ERROR_FAIL;
+    
     ctx->spi = spi;
     ctx->int_gpio = int_gpio;
     ctx->can_speed = cfg->can_speed;
     ctx->can_clock = cfg->can_clock;
     ctx->event_sem = xSemaphoreCreateBinary();
     if (!ctx->event_sem) { free(ctx); return ERROR_FAIL; }
+    
+    // Allocate SW RX FIFO buffer (128 frames for burst traffic handling)
+    ctx->rx_fifo = (spsc_ring_buffer_t*)malloc(sizeof(spsc_ring_buffer_t));
+    if (!ctx->rx_fifo) {
+        vSemaphoreDelete(ctx->event_sem);
+        free(ctx);
+        return ERROR_FAIL;
+    }
+    spsc_ring_init(ctx->rx_fifo);
 
     if (int_gpio >= 0) {
         gpio_config_t io_conf = {
@@ -219,10 +288,25 @@ ERROR_t MCP25XXX_CreateOnDevice(spi_device_handle_t spi,
             .pull_down_en = GPIO_PULLDOWN_DISABLE,
             .intr_type = GPIO_INTR_NEGEDGE
         };
-        if (gpio_config(&io_conf) != ESP_OK) { vSemaphoreDelete(ctx->event_sem); free(ctx); return ERROR_FAIL; }
+        if (gpio_config(&io_conf) != ESP_OK) {
+            free(ctx->rx_fifo);
+            vSemaphoreDelete(ctx->event_sem);
+            free(ctx);
+            return ERROR_FAIL;
+        }
         esp_err_t err = gpio_install_isr_service(0);
-        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) { vSemaphoreDelete(ctx->event_sem); free(ctx); return ERROR_FAIL; }
-        if (gpio_isr_handler_add(int_gpio, mcp2515_isr_handler, ctx) != ESP_OK) { vSemaphoreDelete(ctx->event_sem); free(ctx); return ERROR_FAIL; }
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+            free(ctx->rx_fifo);
+            vSemaphoreDelete(ctx->event_sem);
+            free(ctx);
+            return ERROR_FAIL;
+        }
+        if (gpio_isr_handler_add(int_gpio, mcp2515_isr_handler, ctx) != ESP_OK) {
+            free(ctx->rx_fifo);
+            vSemaphoreDelete(ctx->event_sem);
+            free(ctx);
+            return ERROR_FAIL;
+        }
     }
 
     if (mcp2515_ll_reset(ctx) != ERROR_OK) { MCP25XXX_Destroy(ctx); return ERROR_FAIL; }
@@ -260,6 +344,7 @@ void MCP25XXX_Destroy(MCP25XXX_Handle h)
         gpio_isr_handler_remove(h->int_gpio);
     }
     if (h->event_sem) vSemaphoreDelete(h->event_sem);
+    if (h->rx_fifo) free(h->rx_fifo);
     free(h);
 }
 
@@ -433,15 +518,30 @@ static uint8_t read_status(MCP25XXX_Handle h)
     return trans.rx_data[1];
 }
 
-ERROR_t MCP25XXX_ReadMessageAfterStatCheck(MCP25XXX_Handle h, CAN_FRAME* frame)
+/**
+ * @brief Helper: Read one message from specified RX buffer.
+ * 
+ * @param h MCP25xxx handle
+ * @param buffer_select 0 for RXB0, 1 for RXB1
+ * @param frame Output frame structure
+ * @return ERROR_OK on success, ERROR_FAIL on error
+ */
+static ERROR_t mcp2515_read_buffer(MCP25XXX_Handle h, uint8_t buffer_select, CAN_FRAME* frame)
 {
-    if (!h || !frame) return ERROR_FAIL;
-    uint8_t stat = read_status(h);
-    uint8_t base = 0;
-    if (stat & STAT_RX0IF) base = RXB0SIDH; else if (stat & STAT_RX1IF) base = RXB1SIDH; else return ERROR_NOMSG;
-
+    if (!h || !frame || buffer_select > 1) return ERROR_FAIL;
+    
+    // Select buffer base address and interrupt flag bit
+    const uint8_t base = (buffer_select == 0) ? RXB0SIDH : RXB1SIDH;
+    const uint8_t data_base = (buffer_select == 0) ? RXB0DATA : RXB1DATA;
+    const uint8_t intf_bit = (buffer_select == 0) ? (1u << 0) : (1u << 1);
+    
+    // Read message header (SIDH, SIDL, EID8, EID0, DLC)
     uint8_t hdr[5];
-    for (int i=0;i<5;i++) hdr[i] = mcp2515_ll_read(h, base + i);
+    for (int i = 0; i < 5; i++) {
+        hdr[i] = mcp2515_ll_read(h, base + i);
+    }
+    
+    // Decode CAN ID (standard or extended)
     uint32_t id = ((uint32_t)hdr[0] << 3) | (hdr[1] >> 5);
     bool ext = false;
     if (hdr[1] & TXB_EXIDE_MASK) {
@@ -450,13 +550,65 @@ ERROR_t MCP25XXX_ReadMessageAfterStatCheck(MCP25XXX_Handle h, CAN_FRAME* frame)
         id = (id << 8) | hdr[2];
         id = (id << 8) | hdr[3];
     }
+    
     uint8_t dlc = hdr[4] & DLC_MASK;
-    frame->can_id = ext ? (id | (1u<<31)) : id;
+    frame->can_id = ext ? (id | (1u << 31)) : id;
     frame->can_dlc = dlc;
-    for (int i=0;i<dlc;i++) frame->data[i] = mcp2515_ll_read(h, (base==RXB0SIDH?RXB0DATA:RXB1DATA) + i);
-    // Clear RXnIF
-    mcp2515_ll_bitmod(h, MCP_CANINTF, (base==RXB0SIDH)?(1u<<0):(1u<<1), 0);
+    
+    // Read data bytes
+    for (int i = 0; i < dlc; i++) {
+        frame->data[i] = mcp2515_ll_read(h, data_base + i);
+    }
+    
+    // Clear RXnIF flag to free the buffer
+    mcp2515_ll_bitmod(h, MCP_CANINTF, intf_bit, 0);
+    
     return ERROR_OK;
+}
+
+ERROR_t MCP25XXX_ReadMessageAfterStatCheck(MCP25XXX_Handle h, CAN_FRAME* frame)
+{
+    if (!h || !frame) return ERROR_FAIL;
+    
+    uint8_t stat = read_status(h);
+    
+    // Check both RX buffers in priority order (RXB0 first, then RXB1)
+    if (stat & STAT_RX0IF) {
+        return mcp2515_read_buffer(h, 0, frame);
+    } else if (stat & STAT_RX1IF) {
+        return mcp2515_read_buffer(h, 1, frame);
+    }
+    
+    return ERROR_NOMSG;
+}
+
+ERROR_t MCP25XXX_ReadAllAvailable(MCP25XXX_Handle h, CAN_FRAME* frames, 
+                                   uint8_t max_count, uint8_t* out_count)
+{
+    if (!h || !frames || !out_count) return ERROR_FAIL;
+    
+    *out_count = 0;
+    
+    // Read status to check which buffers have data
+    uint8_t stat = read_status(h);
+    
+    // Read from RXB0 if available
+    if ((stat & STAT_RX0IF) && (*out_count < max_count)) {
+        if (mcp2515_read_buffer(h, 0, &frames[*out_count]) == ERROR_OK) {
+            (*out_count)++;
+        }
+    }
+    
+    // Read from RXB1 if available (important: check AFTER clearing RXB0)
+    // Re-read status because RXB0 read may have caused rollover from RXB1
+    stat = read_status(h);
+    if ((stat & STAT_RX1IF) && (*out_count < max_count)) {
+        if (mcp2515_read_buffer(h, 1, &frames[*out_count]) == ERROR_OK) {
+            (*out_count)++;
+        }
+    }
+    
+    return (*out_count > 0) ? ERROR_OK : ERROR_NOMSG;
 }
 
 void MCP25XXX_SetEventCallback(MCP25XXX_Handle h, MCP25XXX_EventCallback cb, void* userData)
@@ -501,6 +653,47 @@ void MCP25XXX_ClearERRIF(MCP25XXX_Handle h)
     if (!h) return;
     // Clear ERRIF in CANINTF
     mcp2515_ll_bitmod(h, MCP_CANINTF, (1u<<5), 0);
+}
+
+ERROR_t MCP25XXX_ReadFromFifo(MCP25XXX_Handle h, CAN_FRAME* frame)
+{
+    if (!h || !frame) return ERROR_FAIL;
+    if (!h->rx_fifo) return ERROR_NOMSG;  // No SW buffer configured
+    
+    spsc_sample_t sample;
+    if (!spsc_ring_try_pop(h->rx_fifo, &sample)) {
+        return ERROR_NOMSG;  // FIFO empty
+    }
+    
+    // Copy CAN_FRAME from sample payload
+    memcpy(frame, sample.value, sizeof(CAN_FRAME));
+    return ERROR_OK;
+}
+
+bool MCP25XXX_GetRxFifoStats(MCP25XXX_Handle h, uint32_t* out_size,
+                              uint32_t* out_dropped, uint32_t* out_seq)
+{
+    if (!h || !h->rx_fifo) return false;
+    
+    if (out_size) {
+        *out_size = (uint32_t)spsc_ring_size(h->rx_fifo);
+    }
+    if (out_dropped) {
+        *out_dropped = spsc_ring_dropped_total(h->rx_fifo);
+    }
+    if (out_seq) {
+        *out_seq = spsc_ring_last_seq(h->rx_fifo);
+    }
+    
+    return true;
+}
+
+void MCP25XXX_GetIsrDebugCounters(uint32_t* out_isr_calls, uint32_t* out_frames_read,
+                                   uint32_t* out_fifo_pushes)
+{
+    if (out_isr_calls) *out_isr_calls = g_isr_call_count;
+    if (out_frames_read) *out_frames_read = g_isr_frames_read;
+    if (out_fifo_pushes) *out_fifo_pushes = g_isr_fifo_pushes;
 }
 
 

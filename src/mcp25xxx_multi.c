@@ -9,6 +9,10 @@
  * The implementation maintains an internal registry of SPI buses and devices,
  * provides stable handle structures, and wraps the low-level backend API
  * with a user-friendly interface.
+ *
+ * SW RX Buffering:
+ * Each device with an interrupt pin gets a lock-free SW FIFO (128 frames).
+ * ISR drains HW buffers immediately to prevent overflow during burst traffic.
  */
 
 #include <string.h>
@@ -56,6 +60,8 @@ typedef struct {
     spi_device_handle_t    spi;        // SPI device for removal
     gpio_num_t             int_gpio;   // INT pin (for info)
     uint8_t                opened;     // 1 if opened
+    CAN_FRAME              cached_frame;  // Cache for second frame when both RX buffers are full
+    uint8_t                has_cached;    // 1 if cached_frame is valid
 } canif_dev_runtime_t;
 
 static canif_dev_runtime_t s_dev_rt[CANIF_MAX_BUSES][CANIF_MAX_DEVICES_PER_BUS];
@@ -271,6 +277,7 @@ bool canif_open_device(can_dev_handle_t dev)
     rt->h = h;
     rt->spi = spi;
     rt->int_gpio = dcfg->wiring.int_gpio;
+    rt->has_cached = 0;  // Initialize cache as empty
     rt->opened = 1u;
     return true;
 }
@@ -292,6 +299,7 @@ bool canif_close_device(can_dev_handle_t dev)
         (void)mcp2515_spi_remove_device(rt->spi);
         rt->spi = NULL;
     }
+    rt->has_cached = 0;  // Clear cache
     rt->opened = 0u;
     return true;
 }
@@ -499,6 +507,24 @@ void canif_clear_error_int(can_dev_handle_t dev)
     MCP25XXX_ClearERRIF(rt->h);
 }
 
+bool canif_get_rx_buffer_stats(can_dev_handle_t dev, canif_rx_buffer_stats_t* stats)
+{
+    if (!stats) return false;
+    size_t bi, di; if (!resolve_indices(dev, &bi, &di)) return false;
+    canif_dev_runtime_t* rt = &s_dev_rt[bi][di];
+    if (!rt->opened || !rt->h) return false;
+    
+    // Use internal API to access private context
+    return MCP25XXX_GetRxFifoStats(rt->h, &stats->fifo_size, 
+                                    &stats->fifo_dropped, &stats->fifo_last_seq);
+}
+
+void canif_get_isr_debug_counters(uint32_t* out_isr_calls, uint32_t* out_frames_read,
+                                   uint32_t* out_fifo_pushes)
+{
+    MCP25XXX_GetIsrDebugCounters(out_isr_calls, out_frames_read, out_fifo_pushes);
+}
+
 // ======================================================================================
 // Filters & masks
 // ======================================================================================
@@ -565,14 +591,67 @@ bool canif_receive_from(can_dev_handle_t dev, twai_message_t* msg)
     size_t bi, di; if (!resolve_indices(dev, &bi, &di)) return false;
     canif_dev_runtime_t* rt = &s_dev_rt[bi][di];
     if (!rt->opened || !rt->h) return false;
-    CAN_FRAME f;
-    ERROR_t rc = MCP25XXX_ReadMessageAfterStatCheck(rt->h, &f);
-    if (rc != ERROR_OK) return false;
-    if (f.can_dlc > 8) return false;
-    msg->identifier = f.can_id;
-    msg->data_length_code = f.can_dlc;
-    msg->flags = 0; // no EXT/RTR information available here
-    for (uint8_t i=0;i<f.can_dlc;i++) msg->data[i] = f.data[i];
+    
+    CAN_FRAME frame;
+    
+    // Priority 1: Check if we have a cached frame from previous HW read
+    if (rt->has_cached) {
+        frame = rt->cached_frame;
+        rt->has_cached = 0;
+        
+        if (frame.can_dlc > 8) return false;
+        msg->identifier = frame.can_id;
+        msg->data_length_code = frame.can_dlc;
+        msg->flags = 0;
+        for (uint8_t i = 0; i < frame.can_dlc; i++) {
+            msg->data[i] = frame.data[i];
+        }
+        return true;
+    }
+    
+    // Priority 2: Try to read from SW FIFO (populated by ISR).
+    // This provides much better buffering for burst traffic.
+    ERROR_t rc = MCP25XXX_ReadFromFifo(rt->h, &frame);
+    
+    if (rc == ERROR_OK) {
+        // Successfully read from SW FIFO
+        if (frame.can_dlc > 8) return false;
+        msg->identifier = frame.can_id;
+        msg->data_length_code = frame.can_dlc;
+        msg->flags = 0;
+        for (uint8_t i = 0; i < frame.can_dlc; i++) {
+            msg->data[i] = frame.data[i];
+        }
+        return true;
+    }
+    
+    // Priority 3: FALLBACK - Read directly from HW buffers.
+    // This path is used for:
+    // 1. Devices without interrupt pin (polling mode, no SW FIFO)
+    // 2. SW FIFO empty (all caught up)
+    CAN_FRAME frames[2];
+    uint8_t count = 0;
+    ERROR_t rc_hw = MCP25XXX_ReadAllAvailable(rt->h, frames, 2, &count);
+    
+    if (rc_hw != ERROR_OK || count == 0) {
+        return false;  // No messages available
+    }
+    
+    // Return first frame
+    if (frames[0].can_dlc > 8) return false;
+    msg->identifier = frames[0].can_id;
+    msg->data_length_code = frames[0].can_dlc;
+    msg->flags = 0;
+    for (uint8_t i = 0; i < frames[0].can_dlc; i++) {
+        msg->data[i] = frames[0].data[i];
+    }
+    
+    // If two frames were read, cache the second one for next call
+    if (count == 2) {
+        rt->cached_frame = frames[1];
+        rt->has_cached = 1;
+    }
+    
     return true;
 }
 

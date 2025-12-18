@@ -564,6 +564,38 @@ void              canif_clear_rx_overrun(can_dev_handle_t dev);
 /** @brief Clears generic error interrupt flag */
 void              canif_clear_error_int(can_dev_handle_t dev);
 
+/**
+ * @brief SW RX buffer statistics.
+ *
+ * Provides insight into SW FIFO performance and overflow conditions.
+ */
+typedef struct {
+    uint32_t fifo_size;           /**< Current number of frames in SW FIFO */
+    uint32_t fifo_dropped;        /**< Frames dropped due to SW FIFO overflow */
+    uint32_t fifo_last_seq;       /**< Last sequence number assigned */
+} canif_rx_buffer_stats_t;
+
+/**
+ * @brief Get SW RX buffer statistics.
+ *
+ * @param dev Device handle
+ * @param stats Pointer to receive statistics
+ * @return true if statistics retrieved, false if device invalid or no buffer
+ */
+bool              canif_get_rx_buffer_stats(can_dev_handle_t dev, canif_rx_buffer_stats_t* stats);
+
+/**
+ * @brief Get global ISR debug counters.
+ *
+ * Useful for diagnosing interrupt and FIFO operation.
+ *
+ * @param out_isr_calls Total ISR invocations (or NULL)
+ * @param out_frames_read Total frames read in ISR (or NULL)
+ * @param out_fifo_pushes Total frames pushed to FIFO in ISR (or NULL)
+ */
+void              canif_get_isr_debug_counters(uint32_t* out_isr_calls, uint32_t* out_frames_read,
+                                                uint32_t* out_fifo_pushes);
+
 /** @} */ // end of diagnostics group
 
 // ======================================================================================
