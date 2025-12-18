@@ -525,6 +525,22 @@ void canif_get_isr_debug_counters(uint32_t* out_isr_calls, uint32_t* out_frames_
     MCP25XXX_GetIsrDebugCounters(out_isr_calls, out_frames_read, out_fifo_pushes);
 }
 
+void canif_debug_print_status(can_dev_handle_t dev)
+{
+    size_t bi, di;
+    if (!resolve_indices(dev, &bi, &di)) {
+        ESP_LOGE(TAG, "canif_debug_print_status: invalid device");
+        return;
+    }
+    canif_dev_runtime_t* rt = &s_dev_rt[bi][di];
+    if (!rt->opened || !rt->h) {
+        ESP_LOGE(TAG, "canif_debug_print_status: device not opened");
+        return;
+    }
+    
+    MCP25XXX_DebugPrintStatus(rt->h);
+}
+
 // ======================================================================================
 // Filters & masks
 // ======================================================================================
@@ -625,31 +641,26 @@ bool canif_receive_from(can_dev_handle_t dev, twai_message_t* msg)
         return true;
     }
     
-    // Priority 3: FALLBACK - Read directly from HW buffers.
+    // Priority 3: FALLBACK - Read directly from HW buffers using OLD IMPLEMENTATION.
     // This path is used for:
     // 1. Devices without interrupt pin (polling mode, no SW FIFO)
     // 2. SW FIFO empty (all caught up)
-    CAN_FRAME frames[2];
-    uint8_t count = 0;
-    ERROR_t rc_hw = MCP25XXX_ReadAllAvailable(rt->h, frames, 2, &count);
+    // 
+    // USE LEGACY SINGLE-BUFFER READ for compatibility and debugging
+    CAN_FRAME f;
+    ERROR_t rc_legacy = MCP25XXX_ReadMessageAfterStatCheck(rt->h, &f);
     
-    if (rc_hw != ERROR_OK || count == 0) {
+    if (rc_legacy != ERROR_OK) {
         return false;  // No messages available
     }
     
-    // Return first frame
-    if (frames[0].can_dlc > 8) return false;
-    msg->identifier = frames[0].can_id;
-    msg->data_length_code = frames[0].can_dlc;
+    // Convert to twai_message_t
+    if (f.can_dlc > 8) return false;
+    msg->identifier = f.can_id;
+    msg->data_length_code = f.can_dlc;
     msg->flags = 0;
-    for (uint8_t i = 0; i < frames[0].can_dlc; i++) {
-        msg->data[i] = frames[0].data[i];
-    }
-    
-    // If two frames were read, cache the second one for next call
-    if (count == 2) {
-        rt->cached_frame = frames[1];
-        rt->has_cached = 1;
+    for (uint8_t i = 0; i < f.can_dlc; i++) {
+        msg->data[i] = f.data[i];
     }
     
     return true;

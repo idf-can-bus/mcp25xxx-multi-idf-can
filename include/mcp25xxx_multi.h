@@ -596,6 +596,16 @@ bool              canif_get_rx_buffer_stats(can_dev_handle_t dev, canif_rx_buffe
 void              canif_get_isr_debug_counters(uint32_t* out_isr_calls, uint32_t* out_frames_read,
                                                 uint32_t* out_fifo_pushes);
 
+/**
+ * @brief Debug: Print device status registers.
+ *
+ * Logs CANSTAT, CANCTRL, CANINTF, CANINTE, EFLG, and INT pin state.
+ * Useful for diagnosing why interrupts are not firing.
+ *
+ * @param dev Device handle
+ */
+void              canif_debug_print_status(can_dev_handle_t dev);
+
 /** @} */ // end of diagnostics group
 
 // ======================================================================================

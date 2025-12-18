@@ -9,6 +9,11 @@
 #include "spsc_ring_buffer_seq_c.h"
 #include <string.h>
 
+// ESP32/ESP-IDF specific: IRAM_ATTR for ISR functions
+#ifndef IRAM_ATTR
+#define IRAM_ATTR
+#endif
+
 // Ensure struct size is reasonable
 _Static_assert(sizeof(spsc_ring_buffer_t) < 100000, "Ring buffer too large");
 
@@ -42,7 +47,7 @@ void spsc_ring_init(spsc_ring_buffer_t* ring) {
     atomic_store_explicit(&ring->torn_read_failures, 0, memory_order_relaxed);
 }
 
-void spsc_ring_push_isr(spsc_ring_buffer_t* ring, uint32_t time100us, const void* value) {
+void IRAM_ATTR spsc_ring_push_isr(spsc_ring_buffer_t* ring, uint32_t time100us, const void* value) {
     if (!ring || !value) return;
     
     const uint32_t t = atomic_load_explicit(&ring->tail, memory_order_relaxed);

@@ -207,7 +207,7 @@ static ERROR_t mcp2515_ll_reset(MCP25XXX_Handle h)
     return ERROR_OK;
 }
 
-static uint8_t mcp2515_ll_read(MCP25XXX_Handle h, uint8_t reg)
+static uint8_t IRAM_ATTR mcp2515_ll_read(MCP25XXX_Handle h, uint8_t reg)
 {
     spi_transaction_t trans = {};
     trans.length = 24;
@@ -230,7 +230,7 @@ static void mcp2515_ll_write(MCP25XXX_Handle h, uint8_t reg, uint8_t value)
     (void)spi_device_transmit(h->spi, &trans);
 }
 
-static void mcp2515_ll_bitmod(MCP25XXX_Handle h, uint8_t reg, uint8_t mask, uint8_t data)
+static void IRAM_ATTR mcp2515_ll_bitmod(MCP25XXX_Handle h, uint8_t reg, uint8_t mask, uint8_t data)
 {
     spi_transaction_t trans = {};
     trans.length = 32;
@@ -507,7 +507,7 @@ ERROR_t MCP25XXX_SendMessageAfterCtrlCheck(MCP25XXX_Handle h, const CAN_FRAME* f
     return ERROR_OK;
 }
 
-static uint8_t read_status(MCP25XXX_Handle h)
+static uint8_t IRAM_ATTR read_status(MCP25XXX_Handle h)
 {
     spi_transaction_t trans = {};
     trans.length = 16;
@@ -521,12 +521,14 @@ static uint8_t read_status(MCP25XXX_Handle h)
 /**
  * @brief Helper: Read one message from specified RX buffer.
  * 
+ * IRAM_ATTR: Called from ISR, must be in IRAM for reliable execution.
+ * 
  * @param h MCP25xxx handle
  * @param buffer_select 0 for RXB0, 1 for RXB1
  * @param frame Output frame structure
  * @return ERROR_OK on success, ERROR_FAIL on error
  */
-static ERROR_t mcp2515_read_buffer(MCP25XXX_Handle h, uint8_t buffer_select, CAN_FRAME* frame)
+static ERROR_t IRAM_ATTR mcp2515_read_buffer(MCP25XXX_Handle h, uint8_t buffer_select, CAN_FRAME* frame)
 {
     if (!h || !frame || buffer_select > 1) return ERROR_FAIL;
     
@@ -582,8 +584,8 @@ ERROR_t MCP25XXX_ReadMessageAfterStatCheck(MCP25XXX_Handle h, CAN_FRAME* frame)
     return ERROR_NOMSG;
 }
 
-ERROR_t MCP25XXX_ReadAllAvailable(MCP25XXX_Handle h, CAN_FRAME* frames, 
-                                   uint8_t max_count, uint8_t* out_count)
+ERROR_t IRAM_ATTR MCP25XXX_ReadAllAvailable(MCP25XXX_Handle h, CAN_FRAME* frames, 
+                                             uint8_t max_count, uint8_t* out_count)
 {
     if (!h || !frames || !out_count) return ERROR_FAIL;
     
@@ -658,7 +660,10 @@ void MCP25XXX_ClearERRIF(MCP25XXX_Handle h)
 ERROR_t MCP25XXX_ReadFromFifo(MCP25XXX_Handle h, CAN_FRAME* frame)
 {
     if (!h || !frame) return ERROR_FAIL;
-    if (!h->rx_fifo) return ERROR_NOMSG;  // No SW buffer configured
+    if (!h->rx_fifo) {
+        // No SW buffer configured - this is expected for devices without INT pin
+        return ERROR_NOMSG;
+    }
     
     spsc_sample_t sample;
     if (!spsc_ring_try_pop(h->rx_fifo, &sample)) {
@@ -694,6 +699,52 @@ void MCP25XXX_GetIsrDebugCounters(uint32_t* out_isr_calls, uint32_t* out_frames_
     if (out_isr_calls) *out_isr_calls = g_isr_call_count;
     if (out_frames_read) *out_frames_read = g_isr_frames_read;
     if (out_fifo_pushes) *out_fifo_pushes = g_isr_fifo_pushes;
+}
+
+void MCP25XXX_DebugPrintStatus(MCP25XXX_Handle h)
+{
+    if (!h) {
+        ESP_LOGE(TAG, "DebugPrintStatus: NULL handle");
+        return;
+    }
+    
+    uint8_t canstat = mcp2515_ll_read(h, MCP_CANSTAT);
+    uint8_t canctrl = mcp2515_ll_read(h, MCP_CANCTRL);
+    uint8_t canintf = mcp2515_ll_read(h, MCP_CANINTF);
+    uint8_t caninte = mcp2515_ll_read(h, MCP_CANINTE);
+    uint8_t eflg = mcp2515_ll_read(h, MCP_EFLG);
+    uint8_t stat = read_status(h);
+    
+    ESP_LOGI(TAG, "=== MCP25xxx Status ===");
+    ESP_LOGI(TAG, "CANSTAT: 0x%02X (mode=%s)", canstat, 
+             (canstat & 0xE0) == 0x00 ? "NORMAL" :
+             (canstat & 0xE0) == 0x40 ? "LOOPBACK" :
+             (canstat & 0xE0) == 0x80 ? "CONFIG" : "OTHER");
+    ESP_LOGI(TAG, "CANCTRL: 0x%02X", canctrl);
+    ESP_LOGI(TAG, "CANINTF: 0x%02X (RX0IF=%d, RX1IF=%d, ERRIF=%d)",
+             canintf,
+             (canintf & (1u<<0)) ? 1 : 0,
+             (canintf & (1u<<1)) ? 1 : 0,
+             (canintf & (1u<<5)) ? 1 : 0);
+    ESP_LOGI(TAG, "CANINTE: 0x%02X (RX0IE=%d, RX1IE=%d, ERRIE=%d)",
+             caninte,
+             (caninte & (1u<<0)) ? 1 : 0,
+             (caninte & (1u<<1)) ? 1 : 0,
+             (caninte & (1u<<5)) ? 1 : 0);
+    ESP_LOGI(TAG, "EFLG:    0x%02X", eflg);
+    ESP_LOGI(TAG, "STATUS:  0x%02X (RX0=%d, RX1=%d)", stat,
+             (stat & STAT_RX0IF) ? 1 : 0,
+             (stat & STAT_RX1IF) ? 1 : 0);
+    
+    // Check INT pin state
+    if (h->int_gpio >= 0) {
+        int level = gpio_get_level(h->int_gpio);
+        ESP_LOGI(TAG, "INT pin GPIO%d: level=%d (expect 0 when message available)",
+                 h->int_gpio, level);
+    } else {
+        ESP_LOGI(TAG, "INT pin: NOT CONFIGURED (polling mode)");
+    }
+    ESP_LOGI(TAG, "=======================");
 }
 
 

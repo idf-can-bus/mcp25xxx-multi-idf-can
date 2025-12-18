@@ -234,6 +234,16 @@ bool    MCP25XXX_GetRxFifoStats(MCP25XXX_Handle h, uint32_t* out_size,
 void    MCP25XXX_GetIsrDebugCounters(uint32_t* out_isr_calls, uint32_t* out_frames_read,
                                       uint32_t* out_fifo_pushes);
 
+/**
+ * @brief Debug: Read and print MCP25xxx status registers.
+ *
+ * Reads CANSTAT, CANCTRL, CANINTF, CANINTE and logs them for diagnostics.
+ * Useful for debugging why interrupts are not firing.
+ *
+ * @param h MCP25xxx handle
+ */
+void    MCP25XXX_DebugPrintStatus(MCP25XXX_Handle h);
+
 #ifdef __cplusplus
 }
 #endif
